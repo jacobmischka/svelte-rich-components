@@ -1,0 +1,452 @@
+<div class="rich-table">
+	<div class="rich-table-filters">
+		{#each filterFields as filterField}{#if fieldFilterOptions.get(filterField)}
+			<div class="form-group">
+				<label for="{filterField.key}" class="containing-label">
+					{filterField.name}
+					<div class="input-group">
+						<select id="{filterField.key}" class="custom-select"
+								multiple size="2"
+								on:change="handleFilterChange(event, filterField)">
+							{#each fieldFilterOptions.get(filterField) as option}
+								<option selected="{selectedFilterOptions && selectedFilterOptions.has(filterField)
+										&& selectedFilterOptions.get(filterField).includes(option)}">
+									{option}
+								</option>
+							{/each}
+						</select>
+						<div class="input-group-append">
+							<button type="button" class="btn btn-outline-secondary"
+									on:click="handleFilterClear(event, filterField)">
+								Clear
+							</button>
+						</div>
+					</div>
+				</label>
+			</div>
+		{/if}{/each}
+
+		<div class="form-group">
+			<label class="search-label">
+				Search
+				<input type="search" class="form-control" bind:value="searchQuery" />
+			</label>
+		</div>
+	</div>
+
+	{#if paginate}
+		<div class="rich-table-controls rich-table-controls-top">
+			<div class="form-group">
+				<label class="containing-label">
+					Items per page
+					<select class="form-control" bind:value="pageSize">
+						{#each pageSizeOptions as pageSizeOption}
+							<option value="{pageSizeOption}"
+									selected="{pageSize === pageSizeOption}">
+								{pageSizeOption}
+							</option>
+						{/each}
+					</select>
+				</label>
+			</div>
+
+			<Pagination class="rich-table-pagination"
+				currentPage="{currentPage}" pages="{pages}"
+				on:change="set({currentPage: event})" />
+		</div>
+	{/if}
+
+	<div class="table-container">
+		<table class="table table-striped table-hover {class}">
+			<thead>
+				<tr>
+					{#each fixedFields as field}
+						<th class="{field.class}" style="{field.style}">
+							{#if field.sortable === false}
+								{field.name}
+							{:else}
+								<a href="#" class="sortable-field"
+										on:click="handleFieldClick(event, field)">
+									{field.name}
+									{#if field === sortBy}
+										<FeatherIcon attrs="{ {class: 'sort-icon'} }" icon="{
+											sortDirection === 'desc'
+												? 'trending-down'
+												: 'trending-up' }" />
+									{/if}
+								</a>
+							{/if}
+						</th>
+					{/each}
+				</tr>
+			</thead>
+			<tbody>
+				<slot>
+					<!-- FIXME: Uncomment this when hydrating slots is fixed -->
+					<!-- {{#each rowGetter() as row}}
+						<tr>
+							{{#each row as cell}}
+								<td>{{cell}}</td>
+							{{/each}}
+						</tr>
+					{{/each}} -->
+				</slot>
+			</tbody>
+			<slot name="tfoot"></slot>
+		</table>
+	</div>
+
+	{#if paginate}
+		<div class="rich-table-controls rich-table-controls-bottom">
+			<div>
+				<p>
+					{filteredItems.length} items
+					{#if searchQuery}
+						<i>({items.length} total)</i>
+					{/if}
+				</p>
+				<p>
+					Page {currentPage + 1} of {pages.length}
+				</p>
+			</div>
+			<Pagination class="rich-table-pagination"
+				currentPage="{currentPage}" pages="{pages}"
+				on:change="set({currentPage: event})" />
+		</div>
+	{/if}
+</div>
+
+<style>
+	.rich-table-filters,
+	.rich-table-controls {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
+
+	.rich-table-filters .input-group {
+		width: auto;
+	}
+
+	.rich-table-filters > * {
+		margin: 0 0.5em;
+	}
+
+	.rich-table-controls .rich-table-pagination {
+		flex-grow: 1;
+	}
+
+	.sortable-field {
+		color: black;
+	}
+
+	.rich-table :global(.feather) {
+		width: 1em;
+		height: 1em;
+		vertical-align: middle;
+	}
+
+	.rich-table-controls {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0 0.5em;
+	}
+
+	.rich-table-controls div {
+		flex-basis: 20%;
+	}
+
+	.rich-table-controls :global(nav) {
+		flex-basis: 60%;
+	}
+
+	.rich-table-controls :global(nav ul.pagination) {
+		margin: 0;
+		justify-content: center;
+	}
+
+	.table-container {
+		padding: 2em;
+	}
+
+	th {
+		white-space: nowrap;
+	}
+</style>
+
+<script>
+	import dlv from 'dlv';
+	import Fuse from 'fuse.js';
+	import chunk from 'lodash/chunk';
+	import uniq from 'lodash/uniq';
+
+	import FeatherIcon from 'svelte-feather-icon';
+	import Pagination from './Pagination.html';
+
+	import { ucfirst, toWords } from './utils.js';
+
+	export default {
+		data() {
+			return {
+				class: '',
+				fields: [],
+				items: [],
+				searchKeys: [],
+				searchQuery: null,
+				sortBy: null,
+				sortDirection: 'asc',
+				paginate: false,
+				currentPage: 0,
+				pageSizeOptions: [
+					10,
+					25,
+					50,
+					'Unlimited'
+				],
+				exportable: false
+			};
+		},
+		onstate({ changed, current }) {
+			if (changed.sortBy) {
+				if (typeof sortBy === 'string') {
+					this.set({
+						sortBy: this.get().fixedFields
+							.find(field => field.key === current.sortBy)
+					});
+				}
+			}
+
+			if (changed.pages && current.pages) {
+				if (this.get().currentPage >= current.pages.length)
+					this.set({
+						currentPage: current.pages.length - 1
+					});
+			}
+		},
+		oncreate() {
+			const { pageSize, pageSizeOptions } = this.get();
+			if (pageSize && !pageSizeOptions.includes(pageSize)) {
+				pageSizeOptions.push(pageSize);
+				pageSizeOptions.sort();
+				this.set({
+					pageSizeOptions
+				});
+			}
+		},
+		computed: {
+			fixedFields({ fields = [] }) {
+				return fields.map((field, index) => {
+					if (typeof field === 'string') {
+						field = {
+							name: ucfirst(toWords(field).join(' ')),
+							key: field
+						};
+					}
+
+					if (!field.accessor && field.key) {
+						field.accessor = f => dlv(f, field.key);
+					}
+
+					if (!field.key) {
+						// Used to uniquely identify fields for filtering
+						field.key = index;
+					}
+
+					return field;
+				});
+			},
+			filterFields({ fixedFields }) {
+				return fixedFields.filter(field => field.filterable);
+			},
+			fieldFilterOptions({ filterFields, items }) {
+				const map = new Map();
+
+				for (const field of filterFields) {
+					const options = uniq(items.map(field.accessor));
+					if (options && options.length > 0)
+						map.set(field, options);
+				}
+
+				return map;
+			},
+			keys({ fixedFields = [], searchKeys = [] }) {
+				return searchKeys.concat(
+					fixedFields.filter(f => f.key).map(f => f.key)
+				);
+			},
+			fuse({ items, keys }) {
+				return new Fuse(items, {
+					keys
+				});
+			},
+			validFilterOptions({ fieldFilterOptions, selectedFilterOptions }) {
+				if (!selectedFilterOptions || !fieldFilterOptions)
+					return;
+
+				const valid = new Map();
+
+				for (const [field, values] of selectedFilterOptions.entries()) {
+					if (!values)
+						continue;
+
+					const options = fieldFilterOptions.get(field);
+					if (options) {
+						const validValues = values.filter(v => options.includes(v));
+						if (validValues.length > 0)
+							valid.set(field, validValues);
+					}
+				}
+
+				return valid.size === 0
+					? null
+					: valid;
+			},
+			filteredItems({ items, validFilterOptions }) {
+				if (!validFilterOptions)
+					return items;
+
+				return items.filter(item => {
+					for (const [field, values] of validFilterOptions.entries()) {
+						if (!values.includes(field.accessor(item)))
+							return false;
+					}
+					return true;
+				});
+			},
+			searchedItems({ filteredItems, fuse, searchQuery }) {
+				if (!searchQuery)
+					return filteredItems;
+
+				return fuse.search(searchQuery);
+			},
+			directionMultiplier({ sortDirection }) {
+				return sortDirection === 'desc'
+					? -1
+					: 1;
+			},
+			sortedItems({ searchedItems, sortBy, directionMultiplier }) {
+				if (
+					sortBy
+					&& sortBy.sortable !== false
+					&& sortBy.accessor
+				) {
+					searchedItems = searchedItems.slice();
+					searchedItems.sort((a, b) => {
+						let aVal = sortBy.accessor(a);
+						let bVal = sortBy.accessor(b);
+
+						if (typeof aVal === 'string')
+							aVal = aVal.toUpperCase();
+						if (typeof bVal === 'string')
+							bVal = bVal.toUpperCase();
+
+						if (aVal < bVal)
+							return -1 * directionMultiplier;
+						if (aVal > bVal)
+							return 1 * directionMultiplier;
+
+						return 0;
+					});
+				}
+
+				return searchedItems;
+			},
+			pages({ paginate, sortedItems, pageSize, pageSizeOptions }) {
+				if (!paginate)
+					return;
+
+				if (!pageSize)
+					pageSize = pageSizeOptions[0];
+
+				if (pageSize === 'Unlimited')
+					return [sortedItems];
+
+				return chunk(sortedItems, pageSize);
+			},
+			pageItems({ paginate, pages, currentPage }) {
+				if (!paginate)
+					return;
+
+				return pages[currentPage];
+			},
+			richItems({ paginate = false, sortedItems = [], pageItems = [] }) {
+				return paginate
+					? pageItems
+					: sortedItems;
+			},
+			rowGetter({ richItems, fixedFields }) {
+				return () => {
+					const fieldsWithData = fixedFields
+						.filter(f => f.name && f.accessor);
+					const header = fieldsWithData.map(f => f.name);
+					return [
+						header,
+						...richItems.map(item =>
+							fieldsWithData.map(f => f.accessor(item))
+						)
+					];
+				};
+			}
+		},
+		methods: {
+			handleFieldClick(event, field) {
+				event.preventDefault();
+
+				if (field.sortable === false)
+					return;
+
+				const { sortBy, sortDirection } = this.get();
+
+				if (field === sortBy) {
+					this.set({
+						sortDirection: sortDirection === 'asc'
+							? 'desc'
+							: 'asc'
+					});
+				} else {
+					this.set({
+						sortBy: field,
+						sortDirection: 'asc'
+					});
+				}
+
+			},
+			handleSearch(event) {
+				event.preventDefault();
+
+				const data = new FormData(event.target);
+				this.set({searchQuery: data.get().query});
+			},
+			handleFilterChange(event, filterField) {
+				const values = Array.from(event.target.options)
+					.filter(o => o.selected)
+					.map(o => o.value);
+
+				const { selectedFilterOptions = new Map() } = this.get();
+				selectedFilterOptions.set(filterField, values);
+				this.set({selectedFilterOptions});
+			},
+			handleFilterClear(event, filterField) {
+				const { selectedFilterOptions } = this.get();
+				if (selectedFilterOptions) {
+					selectedFilterOptions.delete(filterField);
+					this.set({selectedFilterOptions});
+				}
+			},
+			// freezeColumns(numColumns) {
+			// 	const rows = this.refs.table.querySelectorAll('tr');
+			// 	for (const row of Array.from(rows)) {
+			// 		for (const i = 0; i < Math.min(row.children, numColumns); i++) {
+			//
+			// 		}
+			// 	}
+			// }
+		},
+		components: {
+			FeatherIcon,
+			Pagination
+		}
+	};
+</script>

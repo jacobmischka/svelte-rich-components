@@ -1,0 +1,27 @@
+{
+  "name": "@jacobmischka/svelte-rich-components",
+  "version": "0.1.0",
+  "description": "A collection of some rich components I've made",
+  "main": "index.js",
+  "browser": "dist/index.cjs.js",
+  "module": "dist/index.js",
+  "repository": "https://github.com/jacobmischka/svelte-rich-components.git",
+  "author": "Jacob Mischka <jacob@mischka.me>",
+  "license": "MIT",
+  "private": false,
+  "devDependencies": {
+    "@babel/core": "^7.1.2",
+    "@babel/preset-env": "^7.1.0",
+    "rollup": "^0.66.2",
+    "rollup-plugin-babel": "^4.0.3",
+    "rollup-plugin-svelte": "^4.3.2",
+    "svelte": "^2.13.5",
+    "svelte-loader": "^2.11.0"
+  },
+  "dependencies": {
+    "dlv": "^1.1.2",
+    "fuse.js": "^3.2.1",
+    "lodash": "^4.17.11",
+    "svelte-feather-icon": "^1.0.0"
+  }
+}
