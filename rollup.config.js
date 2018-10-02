@@ -1,5 +1,4 @@
 import svelte from 'rollup-plugin-svelte';
-import babel from 'rollup-plugin-babel';
 
 export default {
 	input: './index.js',
@@ -7,24 +6,18 @@ export default {
 		{
 			file: 'dist/index.cjs.js',
 			format: 'cjs'
-		},
-		{
-			file: 'dist/index.js',
-			format: 'es'
 		}
 	],
 	plugins: [
 		svelte({
 			include: '*.html'
-		}),
-		babel({
-			exclude: 'node_modules/**'
 		})
 	],
 	external: [
 		'dlv',
 		'fuse.js',
-		'lodash',
+		'lodash/chunk',
+		'lodash/uniq',
 		'svelte-feather-icon'
 	]
 };
