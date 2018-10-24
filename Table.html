@@ -132,7 +132,7 @@
 		margin: 0 0.5em;
 	}
 
-	.rich-table-controls .rich-table-pagination {
+	.rich-table-controls :global(.rich-table-pagination) {
 		flex-grow: 1;
 	}
 
@@ -162,11 +162,6 @@
 		flex-basis: 60%;
 	}
 
-	.rich-table-controls :global(nav ul.pagination) {
-		margin: 0;
-		justify-content: center;
-	}
-
 	.table-container {
 		padding: 2em;
 	}
@@ -182,7 +177,7 @@
 	import chunk from 'lodash/chunk';
 	import uniq from 'lodash/uniq';
 
-	import FeatherIcon from 'svelte-feather-icon';
+	import FeatherIcon from 'svelte-feather-icon/FeatherIcon.html';
 	import Pagination from './Pagination.html';
 
 	import { ucfirst, toWords } from './utils.js';
@@ -199,27 +194,33 @@
 				sortDirection: 'asc',
 				paginate: false,
 				currentPage: 0,
+				pageSize: 10,
 				pageSizeOptions: [
 					10,
 					25,
 					50,
 					'Unlimited'
 				],
+				selectedFilterOptions: null,
 				exportable: false
 			};
 		},
 		onstate({ changed, current }) {
-			if (changed.sortBy) {
+			if (changed.sortBy || changed.fixedFields) {
 				if (typeof sortBy === 'string') {
 					this.set({
-						sortBy: this.get().fixedFields
+						sortBy: current.fixedFields
 							.find(field => field.key === current.sortBy)
 					});
 				}
 			}
 
+			if (changed.sortBy || changed.pageSize || changed.searchQuery) {
+				this.set({ currentPage: 0 });
+			}
+
 			if (changed.pages && current.pages) {
-				if (this.get().currentPage >= current.pages.length)
+				if (current.pages.length > 0 && current.currentPage >= current.pages.length)
 					this.set({
 						currentPage: current.pages.length - 1
 					});
