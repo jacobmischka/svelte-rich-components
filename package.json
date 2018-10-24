@@ -1,6 +1,6 @@
 {
   "name": "@jacobmischka/svelte-rich-components",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A collection of some rich components I've made",
   "module": "index.js",
   "main": "dist/index.cjs.js",
